@@ -10,17 +10,40 @@ import Cocoa
 import RxSwift
 
 class CleanUnusedMethods: NSObject {
-    override init() {
-        
+    override init() {}
+
+    // 路径黑名单, 路径中包含关键字的将完全跳过扫描.
+    let blackList: Array? = [String]()//e.g. ["OnlinePush","Jce"]
+
+    func isBlackListFile(fullPath: String) -> Bool {
+        if blackList?.count == 0 {
+            return false
+        }
+
+        for element in blackList! {
+            if fullPath.range(of: element) != nil {
+                return true
+            }
+        }
+        return false
     }
-    
+
+    // 加入数组中方法,将不会展示在结果中.
+    let funcWhiteList: Array = ["responseModelWithData:",
+                                "initWithTableView:",
+                                "setErrMessage:"]
+
+    func isFuncWhiteList(methodName: String) -> Bool {
+        return funcWhiteList.contains(methodName)
+    }
+
     func find(path: String) -> Observable<Any> {
         
         return Observable.create({ (observer) -> Disposable in
             let fileFolderPath = path
             let fileFolderStringPath = fileFolderPath.replacingOccurrences(of: "file://", with: "")
-            let fileManager = FileManager.default;
-            //深度遍历
+            let fileManager = FileManager.default
+            // 深度遍历
             let enumeratorAtPath = fileManager.enumerator(atPath: fileFolderStringPath)
             //过滤文件后缀
             let filterPath = NSArray(array: (enumeratorAtPath?.allObjects)!).pathsMatchingExtensions(["h","m"])
@@ -44,17 +67,21 @@ class CleanUnusedMethods: NSObject {
                 
                 //读取文件内容
                 let fileUrl = URL(string: fullPath)
-                
-                if fileUrl == nil {
-                    
-                } else {
+
+                if fileUrl == nil || self.isBlackListFile(fullPath: fullPath) {} else {
                     let aFile = File()
                     aFile.path = fullPath
                     //显示parsing的状态
                     observer.on(.next("进度：\(i+1)/\(count) 正在查询文件：\(aFile.name)"))
                     i += 1
-                    let content = try! String(contentsOf: fileUrl!, encoding: String.Encoding.utf8)
-                    //print("文件内容: \(content)")
+                    let content: String
+//                    let content = try? String(contentsOf: fileUrl!, encoding: String.Encoding.utf8)
+                    do {
+                        content = try String(contentsOf: fileUrl!, encoding: String.Encoding.utf8)
+                    } catch {
+                        content = ""
+                    }
+                    // print("文件内容: \(content)")
                     aFile.content = content
                     
                     let tokens = ParsingBase.createOCTokens(conent: content)
@@ -92,7 +119,7 @@ class CleanUnusedMethods: NSObject {
                         //处理 #import start
                         if aLine.hasPrefix(Sb.importStr) {
                             let imp = ParsingImport.parsing(tokens: tokens)
-                            guard imp.fileName.characters.count > 0 else {
+                            guard imp.fileName.count > 0 else {
                                 continue
                             }
                             aFile.imports.append(imp)
@@ -249,10 +276,10 @@ class CleanUnusedMethods: NSObject {
                             
                             if (tk == Sb.minus || tk == Sb.add) && psMtdStep == 0 && !psMtdTf {
                                 psMtdTf = true
-                                psMtdStep = 1;
+                                psMtdStep = 1
                                 mtdArr.append(tk)
                             } else if tk == Sb.rBktL && psMtdStep == 1 && psMtdTf {
-                                psMtdStep = 2;
+                                psMtdStep = 2
                                 mtdArr.append(tk)
                             } else if (tk == Sb.semicolon || tk == Sb.braceL) && psMtdStep == 2 && psMtdTf {
                                 mtdArr.append(tk)
@@ -269,8 +296,8 @@ class CleanUnusedMethods: NSObject {
                                     methodsDefinedInHFile.append(parsedMethod)
                                     psMtdTf = false
                                 }
-                                //重置
-                                psMtdStep = 0;
+                                // 重置
+                                psMtdStep = 0
                                 mtdArr = []
                                 
                             } else if psMtdTf {
@@ -290,12 +317,12 @@ class CleanUnusedMethods: NSObject {
             } //结束所有文件遍历
             
             //todo:去重
-            let methodsUsedSet = Set(methodsUsed) //用过方法
-            let methodsMFileSet = Set(methodsMFile) //m的映射文件
-            print("H方法：\(methodsDefinedInHFile.count)个")
-            print("M方法：\(methodsDefinedInMFile.count)个")
-            print("用过方法(包括系统的)：\(methodsUsed.count)个")
-            //找出h文件中没有用过的方法
+            let methodsUsedSet = Set(methodsUsed) // 用过方法
+            let methodsMFileSet = Set(methodsMFile) // m的映射文件
+//            print("H方法：\(methodsDefinedInHFile.count)个")
+//            print("M方法：\(methodsDefinedInMFile.count)个")
+//            print("用过方法(包括系统的)：\(methodsUsed.count)个")
+            // 找出h文件中没有用过的方法
             var unUsedMethods = [Method]()
             for aHMethod in methodsDefinedInHFile {
                 //todo:第一种无参数的情况暂时先过滤。第二种^这种情况过滤
@@ -313,11 +340,11 @@ class CleanUnusedMethods: NSObject {
                     //todo:处理delegate这样的情况
                     if methodsMFileSet.contains(aHMethod.pnameId) {
                         //todo:定义一些继承的类，将继承方法加入头文件中的情况
-                        //白名单
-//                        if aHMethod.pnameId == "responseModelWithData:" || aHMethod.pnameId == "initWithTableView:" || aHMethod.pnameId == "setErrMessage:" {
-//                            continue
-//                        }
-                        
+                        // 白名单
+                        if self.isFuncWhiteList(methodName: aHMethod.pnameId) {
+                            continue
+                        }
+                        print("\n方法: \(aHMethod.pnameId)\n路径: \(aHMethod.filePath.replacingOccurrences(of: "file:///Users/geminiyao/Documents/TXCode/", with: ""))\n")
                         unUsedMethods.append(aHMethod)
                     }
                 }

@@ -14,12 +14,15 @@ protocol DragViewDelegate {
     func dragFileOk(filePath:String);
 }
 
+@available(OSX 10.13, *)
 class DragView: NSView {
     var delegate : DragViewDelegate?
     
     override func awakeFromNib() {
         super.awakeFromNib()
-        self.register(forDraggedTypes: [NSFilenamesPboardType, NSURLPboardType, NSPasteboardTypeTIFF])
+        let NSFilenamesPboardTypeTemp = NSPasteboard.PasteboardType("NSFilenamesPboardType")
+        
+        self.registerForDraggedTypes([NSFilenamesPboardTypeTemp,NSPasteboard.PasteboardType.URL,NSPasteboard.PasteboardType.tiff])
     }
     
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
@@ -41,8 +44,10 @@ class DragView: NSView {
     
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
 //        var files = [URL]()
+        let NSFilenamesPboardTypeTemp = NSPasteboard.PasteboardType("NSFilenamesPboardType")
         var filePath = ""
-        if let board = sender.draggingPasteboard().propertyList(forType: NSFilenamesPboardType) as? NSArray {
+        if let board = sender.draggingPasteboard.propertyList(forType: NSFilenamesPboardTypeTemp) as? NSArray {
+            print(board)
             for path in board {
                 filePath = path as! String
             }
